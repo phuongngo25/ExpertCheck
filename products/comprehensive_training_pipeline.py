@@ -119,7 +119,7 @@ class ComprehensiveTrainingPipeline:
         
         report_data = []
         for model_name, result in all_results.items():
-            # Tương tự như hàm _find_best_model
+            
             inner_result = result
             if isinstance(result, dict) and len(result) == 1 and isinstance(next(iter(result.values())), dict):
                 inner_result = next(iter(result.values()))
@@ -141,5 +141,6 @@ class ComprehensiveTrainingPipeline:
         
         print(report_df.to_string(index=False, float_format="%.4f"))
         print("-" * 80)
-        print(f"🏆 Mô hình đề xuất: {best_model_info['name']} (Balanced Accuracy: {best_model_info['balanced_accuracy']:.4f})")
+        print(f" Mô hình đề xuất: {best_model_info['name']} (Balanced Accuracy: {best_model_info['balanced_accuracy']:.4f})")
+
         print("="*80)

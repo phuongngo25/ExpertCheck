@@ -1,4 +1,4 @@
-# enhanced_neural_model.py
+#enhanced_neural_model.py
 
 import numpy as np
 import tensorflow as tf
@@ -49,41 +49,82 @@ class EnhancedNeuralModel:
             'mlp_model': self._create_residual_mlp_model,
             'cnn_2d_model': self._create_2d_cnn_model,
             'advanced_cnn': self._create_advanced_cnn_model,
+            # 'transformer': self._create_transformer_model,
+            # 'conformer': self._create_conformer_model,
         }
-
-    # =============================================================================
-    # CÁC HÀM TẠO KIẾN TRÚC MODEL
-    # =============================================================================
+# tạo kien truc 
     
     def _residual_block(self, x, units, dropout_rate=0.4, l2_reg=1e-5):
-        # ... (giữ nguyên)
-        pass
+        shortcut = x
+        y = layers.Dense(units, kernel_initializer='he_normal', kernel_regularizer=regularizers.l2(l2_reg))(x)
+        y = layers.BatchNormalization()(y)
+        y = layers.Activation('gelu')(y)
+        y = layers.Dropout(dropout_rate)(y)
+        y = layers.Dense(units, kernel_initializer='he_normal', kernel_regularizer=regularizers.l2(l2_reg))(y)
+        y = layers.BatchNormalization()(y)
+        if shortcut.shape[-1] != units:
+            shortcut = layers.Dense(units, kernel_initializer='he_normal')(shortcut)
+        y = layers.Add()([shortcut, y])
+        y = layers.Activation('gelu')(y)
+        y = layers.Dropout(dropout_rate)(y)
+        return y
 
     def _create_residual_mlp_model(self, input_shape: tuple, num_classes: int, steps_per_epoch: int) -> keras.Model:
-        # ... (giữ nguyên)
-        pass
-
+        self.logger.info(f"Xây dựng kiến trúc MLP với input shape: {input_shape}")
+        inputs = layers.Input(shape=input_shape)
+        x = layers.Dense(256, kernel_initializer='he_normal')(inputs)
+        x = layers.BatchNormalization()(x)
+        x = layers.Activation('gelu')(x)
+        x = self._residual_block(x, 256)
+        x = self._residual_block(x, 512)
+        x = layers.Dense(128, activation='gelu')(x) 
+        x = self._residual_block(x, 256)
+        outputs = layers.Dense(num_classes, activation='softmax')(x)
+        model = keras.Model(inputs=inputs, outputs=outputs, name='Residual_MLP_Model')
+        lr_schedule = keras.optimizers.schedules.CosineDecay(1e-3, self.config.model.nn_config.epochs * steps_per_epoch)
+        optimizer = keras.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=1e-5)
+        model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.summary(print_fn=self.logger.info)
+        return model
+        
     def _create_2d_cnn_model(self, input_shape: tuple, num_classes: int, steps_per_epoch: int) -> keras.Model:
-        # ... (giữ nguyên)
-        pass
+        self.logger.info(f"Xây dựng kiến trúc 2D-CNN (V3) với input shape: {input_shape}")
+        inputs = keras.Input(shape=input_shape)
+        x = layers.Conv2D(filters=64, kernel_size=(2, 3), padding='same')(inputs)
+        x = layers.BatchNormalization()(x)
+        x = layers.Activation('relu')(x)
+        x = layers.Conv2D(filters=64, kernel_size=(2, 3), padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Activation('relu')(x)
+        x = layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = layers.Dropout(0.4)(x)
+        x = layers.Conv2D(filters=128, kernel_size=(2, 3), padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Activation('relu')(x)
+        x = layers.GlobalAveragePooling2D()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(128, activation='relu')(x)
+        x = layers.Dropout(0.5)(x)
+        outputs = layers.Dense(num_classes, activation='softmax')(x)
+        model = keras.Model(inputs=inputs, outputs=outputs, name="2D_CNN_Model_V3")
+        optimizer = keras.optimizers.Adam(learning_rate=1e-3)
+        model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.summary(print_fn=self.logger.info)
+        return model
         
     def _create_advanced_cnn_model(self, input_shape: tuple, num_classes: int, steps_per_epoch: int) -> keras.Model:
         self.logger.info(f"Xây dựng kiến trúc CNN Đa nhánh + Attention với input shape: {input_shape}")
         inputs = keras.Input(shape=input_shape)
         
-        # --- Nhánh 1: Kernel nhỏ ---
         branch_a = layers.Conv1D(filters=32, kernel_size=3, padding='same', activation='relu')(inputs)
         branch_a = layers.BatchNormalization()(branch_a)
         
-        # --- Nhánh 2: Kernel vừa ---
         branch_b = layers.Conv1D(filters=32, kernel_size=9, padding='same', activation='relu')(inputs)
         branch_b = layers.BatchNormalization()(branch_b)
         
-        # --- Nhánh 3: Kernel lớn ---
         branch_c = layers.Conv1D(filters=32, kernel_size=15, padding='same', activation='relu')(inputs)
         branch_c = layers.BatchNormalization()(branch_c)
 
-        # Kết hợp các nhánh
         x = layers.concatenate([branch_a, branch_b, branch_c])
         x = layers.MaxPooling1D(pool_size=2)(x)
         x = layers.Dropout(0.4)(x)
@@ -92,7 +133,6 @@ class EnhancedNeuralModel:
         x = layers.BatchNormalization()(x)
         x = layers.Activation('relu')(x)
 
-        # --- Cơ chế Chú ý (Self-Attention) ---
         attention_output = layers.Attention()([x, x])
         
         x = layers.GlobalAveragePooling1D()(attention_output)
@@ -112,19 +152,16 @@ class EnhancedNeuralModel:
         model.summary(print_fn=self.logger.info)
         return model
 
-    # =============================================================================
-    # HÀM HUẤN LUYỆN VÀ ĐÁNH GIÁ (ĐÃ SỬA LỖI)
-    # =============================================================================
+#training va evaluation 
 
     def train_and_evaluate_all(self, X_train, y_train, X_test, y_test):
         results = {}
         y_train_encoded = self.label_encoder.fit_transform(y_train)
         y_test_encoded = self.label_encoder.transform(y_test)
 
-        # Dùng một phần nhỏ của tập train làm validation set nội bộ
         X_train_fit, X_val, y_train_fit, y_val = train_test_split(
             X_train, y_train_encoded,
-            test_size=0.2, # 20% for validation
+            test_size=0.2,
             random_state=self.config.model.random_state,
             stratify=y_train_encoded
         )
@@ -136,9 +173,7 @@ class EnhancedNeuralModel:
                 self.logger.info(f"--- Đang huấn luyện mô hình {model_name.upper()} ---")
                 create_fn = self.model_architectures[model_name]
                 
-                # =============================================================================
-                # <<< SỬA LỖI: Logic xử lý input_shape cho từng loại model >>>
-                # =============================================================================
+                # Logic xử lý input_shape cho từng loại model
                 if model_name == 'cnn_2d_model':
                     self.logger.info("Chuẩn bị dữ liệu 4D cho 2D-CNN (trên đặc trưng)...")
                     if X_train_fit.ndim != 2:
@@ -158,17 +193,17 @@ class EnhancedNeuralModel:
                         raise ValueError(f"Model '{model_name}' yêu cầu dữ liệu 3D (tín hiệu thô), nhưng nhận được {X_train_fit.ndim}D.")
                     
                     X_train_iter, X_val_iter, X_test_iter = X_train_fit, X_val, X_test
-                    input_shape_iter = (X_train_fit.shape[1], X_train_fit.shape[2]) # Shape là (timesteps, channels), vd: (256, 4)
+                    input_shape_iter = (X_train_fit.shape[1], X_train_fit.shape[2])
 
-                else: # Dành cho các mô hình 1D trên đặc trưng phẳng như MLP
+                else: # Dành cho MLP và các model 1D khác trên đặc trưng phẳng
                     self.logger.info("Sử dụng dữ liệu 2D (đặc trưng phẳng) cho mô hình 1D...")
                     if X_train_fit.ndim != 2:
                         raise ValueError(f"Model '{model_name}' yêu cầu dữ liệu 2D (đặc trưng phẳng), nhưng nhận được {X_train_fit.ndim}D.")
                     
                     X_train_iter, X_val_iter, X_test_iter = X_train_fit, X_val, X_test
-                    input_shape_iter = (X_train_fit.shape[1],) # Shape là (số đặc trưng,), vd: (48,)
+                    input_shape_iter = (X_train_fit.shape[1],)
 
-                results[model_name] = self._train_single(
+                results[model.name] = self._train_single(
                     create_fn, X_train_iter, y_train_fit, X_val_iter, y_val, X_test_iter, y_test_encoded, 
                     input_shape_iter, steps_per_epoch
                 )

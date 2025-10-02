@@ -69,13 +69,13 @@ class EnhancedDataLoader:
         # Lưu file EMG
         emg_cols = ['sample_index', 'label'] + [f'emg_{i+1}' for i in range(cfg_proc.max_channels)]
         json_full_df[emg_cols].to_csv(output_path, index=False)
-        self.logger.info(f"✅ Đã lưu file EMG từ JSON vào: {output_path}")
+        self.logger.info(f"Đã lưu file EMG từ JSON vào: {output_path}")
         
         # Lưu file IMU (tùy chọn)
         imu_output_path = os.path.join(cfg_paths.processed_data_dir, cfg_paths.json_imu_csv)
         imu_cols = [col for col in json_full_df.columns if col not in emg_cols or col in ['sample_index', 'label']]
         json_full_df[imu_cols].to_csv(imu_output_path, index=False)
-        self.logger.info(f"✅ Đã lưu file IMU từ JSON vào: {imu_output_path}")
+        self.logger.info(f" Đã lưu file IMU từ JSON vào: {imu_output_path}")
 
     def _process_matlab_files(self):
         """Xử lý tất cả các file trong thư mục MATLAB."""
@@ -122,7 +122,7 @@ class EnhancedDataLoader:
         mat_emg_df['label'] = mat_emg_df['label'].replace(-1, 0)
         
         mat_emg_df.to_csv(output_path, index=False)
-        self.logger.info(f"✅ Đã lưu file EMG từ MATLAB vào: {output_path}")
+        self.logger.info(f"Đã lưu file EMG từ MATLAB vào: {output_path}")
 
     def _extract_full_data_from_json(self, json_data: dict, num_channels: int) -> Optional[pd.DataFrame]:
         all_dfs: List[pd.DataFrame] = []

@@ -74,13 +74,10 @@ class AdvancedFeatureExtractor:
                 elif feature_name == 'var': features.append(np.var(signal_ch, ddof=0))
                 elif feature_name == 'zc':
                     zc_threshold = 0.001 
-                    # Làm mịn tín hiệu để ổn định ZC, giảm nhiễu tần số cao
-                    smoothed_signal = self._moving_average(signal_ch, window_size=3)
-                    
-                    # Tính ZC trên tín hiệu đã làm mịn, khớp với logic ZC_Strict của C
+                    # Tính ZC trực tiếp trên tín hiệu đã lọc (giống hệt logic C)
                     zc_count = np.sum(
-                        ( (smoothed_signal[:-1] * smoothed_signal[1:]) < 0 ) & 
-                        ( np.abs(smoothed_signal[1:] - smoothed_signal[:-1]) > zc_threshold )
+                        ( (signal_ch[:-1] * signal_ch[1:]) < 0 ) & 
+                        ( np.abs(signal_ch[:-1] - signal_ch[1:]) > zc_threshold )
                     )
                     features.append(zc_count)
 

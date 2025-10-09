@@ -33,12 +33,12 @@ class ComprehensiveTrainingPipeline:
         if hasattr(self.config.model, 'enable_ppo') and self.config.model.enable_ppo:
             self.ppo_model = EnhancedPPOModel(self.config)
 
-    def run_training(self, X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y_test: np.ndarray):
+    def run_training(self, X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y_test: np.ndarray, data_format: str = None):
         """
         Thực thi pipeline huấn luyện từ dữ liệu đã được chia sẵn.
         """
         self.logger.info(f"Đã nhận dữ liệu huấn luyện: {len(X_train)} mẫu train, {len(X_test)} mẫu test.")
-
+        self.logger.info(f"Đã nhận dữ liệu huấn luyện (Định dạng: {data_format}). Bắt đầu pipeline...")
         all_results = {}
         # Huấn luyện lần lượt các nhóm mô hình được kích hoạt trong config
         if self.config.model.enable_ml_models:
@@ -47,7 +47,7 @@ class ComprehensiveTrainingPipeline:
 
         if self.config.model.enable_neural_models:
             self.logger.info("--- Bắt đầu huấn luyện các mô hình Neural Network ---")
-            all_results.update(self.neural_models.train_and_evaluate_all(X_train, y_train, X_test, y_test))
+            all_results.update(self.neural_models.train_and_evaluate_all(X_train, y_train, X_test, y_test, data_format=data_format))
 
         if hasattr(self.config.model, 'enable_dqn') and self.config.model.enable_dqn:
             self.logger.info("--- Bắt đầu huấn luyện mô hình DQN ---")
@@ -70,21 +70,33 @@ class ComprehensiveTrainingPipeline:
         return {"training_results": all_results, "best_model_info": best_model_info}
 
     def _save_all_models(self):
+        """
+        *** CẬP NHẬT: HÀM NÀY GIỜ ĐÂY SẼ TỰ ĐỘNG CHỌN ĐÚNG THƯ MỤC LƯU ***
+        """
         self.logger.info("--- Bắt đầu lưu các mô hình đã huấn luyện ---")
-        output_models_path = os.path.join(self.config.paths.output_dir, self.config.paths.models_dir)
+        
+        # --- Logic chọn thư mục thông minh ---
+        models_dir_name = ""
+        if self.config.project.target_dataset == 'wyoflex':
+            if self.config.project.target_forearm == 'right':
+                models_dir_name = self.config.paths.models_dir_wyo_right
+            else:
+                models_dir_name = self.config.paths.models_dir_wyo_left
+        elif self.config.project.target_dataset == 'original':
+            models_dir_name = self.config.paths.models_dir_original
+        else:
+            self.logger.error("Không thể xác định thư mục lưu model do target_dataset không hợp lệ.")
+            return
+
+        output_models_path = os.path.join(self.config.paths.output_dir, models_dir_name)
         os.makedirs(output_models_path, exist_ok=True)
         self.logger.info(f"Các mô hình sẽ được lưu tại: {output_models_path}")
 
+        # --- Phần còn lại giữ nguyên ---
         if self.config.model.enable_ml_models and hasattr(self, 'ml_models'):
             self.ml_models.save_models(output_models_path)
         if self.config.model.enable_neural_models and hasattr(self, 'neural_models'):
             self.neural_models.save_models(output_models_path)
-        if hasattr(self.config.model, 'enable_dqn') and self.config.model.enable_dqn and hasattr(self, 'dqn_model'):
-            self.dqn_model.save_model(output_models_path)
-        if hasattr(self.config.model, 'enable_dt') and self.config.model.enable_dt and hasattr(self, 'dt_model'):
-            self.dt_model.save_model(output_models_path)
-        if hasattr(self.config.model, 'enable_ppo') and self.config.model.enable_ppo and hasattr(self, 'ppo_model'):
-            self.ppo_model.save_model(output_models_path)
             
         self.logger.info("--- Lưu mô hình hoàn tất ---")
 
@@ -119,7 +131,7 @@ class ComprehensiveTrainingPipeline:
         
         report_data = []
         for model_name, result in all_results.items():
-            
+            # Tương tự như hàm _find_best_model
             inner_result = result
             if isinstance(result, dict) and len(result) == 1 and isinstance(next(iter(result.values())), dict):
                 inner_result = next(iter(result.values()))
@@ -141,6 +153,5 @@ class ComprehensiveTrainingPipeline:
         
         print(report_df.to_string(index=False, float_format="%.4f"))
         print("-" * 80)
-        print(f" Mô hình đề xuất: {best_model_info['name']} (Balanced Accuracy: {best_model_info['balanced_accuracy']:.4f})")
-
+        print(f"🏆 Mô hình đề xuất: {best_model_info['name']} (Balanced Accuracy: {best_model_info['balanced_accuracy']:.4f})")
         print("="*80)

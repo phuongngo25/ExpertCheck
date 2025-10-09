@@ -21,8 +21,8 @@ class PathsConfig:
     json_emg_csv: str = 'json_emg_data.csv'
     matlab_emg_csv: str = 'matlab_emg_data_final.csv'
     
-    wyoflex_emg_csv_right: str = 'wyoflex_emg_processed_right.csv'# tay phai 
-    wyoflex_emg_csv_left: str = 'wyoflex_emg_processed_left.csv'# tay trai 
+    wyoflex_emg_processed_template: str = 'wyoflex_emg_processed_{forearm}_{offset_type}.csv'
+    features_template: str = 'features_{forearm}_{offset_type}.csv'
 
     
     # Output dir 
@@ -31,6 +31,25 @@ class PathsConfig:
     models_dir_wyo_right: str = 'models_wyo_right'
     models_dir_wyo_left: str = 'models_wyo_left'
 
+@dataclass
+class ProjectConfig:
+    """Điều khiển quy trình làm việc tổng thể của dự án."""
+    # === CÔNG TẮC CHÍNH ===
+    # 'wyoflex': Chạy quy trình SSL -> Fine-tuning mới.
+    # 'original': Chạy quy trình so sánh ML/NN cũ qua ComprehensiveTrainingPipeline.
+    target_dataset: str = 'wyoflex'
+    # Cấu hình phụ cho 'wyoflex'
+    target_forearm: str = 'right'  # 'right' hoặc 'left'
+    # Chế độ cho 'wyoflex': 'pretrain_ssl', 'train', 'tune','spectrogram_cnn'
+    experiment_mode: str = 'lstm_on_features'
+
+@dataclass
+class DataPrepConfig:
+    """Cấu hình cho việc chuẩn bị dữ liệu WyoFlex."""
+    use_offset_data: bool = False # True: dùng O1 (có offset), False: dùng O2
+    window_size: int = 256
+    overlap_ratio: float = 0.5
+    sequence_length: int = 10
 @dataclass
 class OriginalProcessingConfig:
     """Cấu hình xử lý cho các bộ dữ liệu GỐC (JSON, MATLAB)."""
@@ -80,13 +99,13 @@ class WyoFlexFeatureConfig:
 class NeuralNetworkConfig:
     """Cấu hình chi tiết cho các kiến trúc Neural Network."""
     epochs: int = 100
-    batch_size: int = 256
+    batch_size: int = 64
     patience: int = 50
 
 @dataclass
 class GroupingConfig:
     """Cấu hình cho việc gom nhóm các cử chỉ tương tự."""
-    enable_gesture_grouping: bool = True  # Bật/Tắt tính năng gom nhóm
+    enable_gesture_grouping: bool = False   # Bật/Tắt tính năng gom nhóm
 
     gesture_mapping: Dict[int, int] = field(default_factory=lambda: {
         # Nhóm 0: Nắm Mạnh (Power)
@@ -113,6 +132,35 @@ class GroupingConfig:
     })
 
 @dataclass
+class CnnLstmConfig:
+    """Cấu hình cho kiến trúc Hybrid CNN-LSTM và cách chuẩn bị dữ liệu chuỗi."""
+    # Bật True để sử dụng kiến trúc này
+    enabled: bool = True
+    
+    # --- Tham số cho việc tạo chuỗi (Data Preparation) ---
+    # Độ dài của mỗi chuỗi ngắn (tính bằng mẫu). Ví dụ: 1000 mẫu = 1 giây
+    sequence_length: int = 1000
+    # Bước nhảy khi trượt cửa sổ để tạo chuỗi mới.
+    sequence_step: int = 250
+    # --- Tham số cho kiến trúc mô hình (Model Architecture) ---
+    cnn_filters: List[int] = field(default_factory=lambda: [64, 128])
+    cnn_kernel_size: int = 11
+    lstm_units: int = 128
+
+@dataclass
+class LstmOnFeaturesConfig:
+    """Cấu hình cho mô hình LSTM trên chuỗi đặc trưng."""
+    sequence_length: int = 15  # Số vector đặc trưng trong một chuỗi
+    use_offset_data: bool = False  # True: Dùng dữ liệu O1, False: Dùng O2
+@dataclass 
+class TuningConfig:
+    """Cấu hình cho lớp tinh chỉnh Hyperparameter"""
+    enable_tuning : bool = True   # False if not using 
+    n_trials : int =20 # so lan thu 
+
+    #model can tinh chinh 
+    target_nn_model_to_tune: str = 'advanced_cnn'
+@dataclass
 class XAIConfig:
     """Cấu hình cho việc chạy phân tích và giải thích mô hình (XAI)."""
     enable_xai_analysis: bool = False  # Bật/Tắt toàn bộ quá trình phân tích
@@ -123,8 +171,7 @@ class XAIConfig:
     
   
     n_background_samples: int = 100    
-    n_explain_samples: int = 10        
-    
+    n_explain_samples: int = 10       
     # lưu kết quả
     output_dir: str = 'xai_reports'
 @dataclass
@@ -132,14 +179,10 @@ class ModelConfig:
     """Cấu hình huấn luyện mô hình tổng thể."""
     random_state: int = 42
     test_size: float = 0.2
-
     # Kích hoạt các nhóm mô hình để huấn luyện 
-    enable_ml_models: bool = False         
-    enable_neural_models: bool = True         
-    # enable_dqn: bool = False 
-    # enable_dt: bool = False +))))
-    # enable_ppo: bool = False 
-
+    enable_ml_models: bool = False           
+    enable_neural_models: bool = True          
+    enable_ovr_strategy: bool = False   # Đặt là True để huấn luyện theo kiểu One-vs-Rest
     # mo hinh ML 
     ml_models: List[str] = field(default_factory=lambda: [
         'lightgbm',                 
@@ -153,13 +196,12 @@ class ModelConfig:
         'hist_gradient_boosting'
     ])
 
-
     neural_architectures: List[str] = field(default_factory=lambda: [
         # 'mlp_model', 
         # 'transformer', 
-        # 'conformer', 
-        # 'cnn_2d_model',
-        'advanced_cnn'
+        # 'lstm_on_features', 
+        # 'advanced_cnn',
+        'cnn_lstm'
     ])
     nn_config: NeuralNetworkConfig = field(default_factory=NeuralNetworkConfig)
 
@@ -173,17 +215,21 @@ class OutputConfig:
 class Config:
     def __init__(self, config_path: Optional[str] = None):
         self.paths = PathsConfig()
+        self.project = ProjectConfig()
+        self.data_prep = DataPrepConfig()
         self.wyo_processing = WyoFlexProcessingConfig()
         self.wyo_features = WyoFlexFeatureConfig()
         self.model = ModelConfig()
+        self.lstm_on_features = LstmOnFeaturesConfig()
         self.output = OutputConfig()
         self.xai = XAIConfig()
         self.grouping = GroupingConfig() # gom nhóm
+        self.tuning = TuningConfig() # tinh chinh
+        self.cnn_lstm = CnnLstmConfig() 
+        
         
         self.original_processing = OriginalProcessingConfig()
         
-        if config_path: 
-            self.load_config(config_path)
 
     def load_config(self, config_path: str):
         config_path = Path(config_path)
